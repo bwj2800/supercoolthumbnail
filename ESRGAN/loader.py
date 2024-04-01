@@ -1,9 +1,6 @@
-import glob
-import random
-import os
+
 import numpy as np
 import re
-import cv2
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
@@ -73,7 +70,6 @@ class ImageDataset(Dataset):
         clean_img = Image.open(gt_path+self.files[index % len(self.files)][:-6]+'GT.jpg')
         # img = Image.open(gt_path+self.files[index % len(self.files)][:-6]+'GT.jpg')
         img = Image.open(path+self.files[index % len(self.files)])
-
         
         # Clean 이미지와 바운딩 박스의 중점을 일치시키는 작업 추가
         with open(gt_label_path+self.files[index % len(self.files)][:-6]+'GT.json', 'r', encoding='utf-8-sig') as json_file:
