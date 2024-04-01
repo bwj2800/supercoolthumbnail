@@ -1,7 +1,6 @@
 MODEL_NAME = "resnet34_2"
 MODEL_PATH = '../result/resnet/saved_model/'+MODEL_NAME+'.h5'
 DATA_PATH = '../datasets/validation/source'
-EPOCH = 100
 BATCH_SIZE = 16
 ACCURACY_RESULT=''
 
