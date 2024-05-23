@@ -19,13 +19,13 @@ import numpy as np
 RESNET_MODEL_NAME = "resnet34_2"
 RESNET_MODEL_PATH = './result/resnet/saved_model/'+RESNET_MODEL_NAME+'.h5'
 FOCUS_MODEL_NAME='focus_model2'
-focus_checkpoint='generator_199'
+focus_checkpoint='generator_54'
 SHAKEN_MODEL_NAME='shaken_model2'
-shaken_checkpoint='generator_227'
+shaken_checkpoint='generator_44'
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset_root", type=str, default="./datasets/validation", required=False, help="Path to image")
-parser.add_argument("--dataset_txt_path", type=str, default="./datasets/new_val_shaken.txt", required=False, help="Path to image")
+parser.add_argument("--dataset_txt_path", type=str, default="./datasets/new_val_all.txt", required=False, help="Path to image")
 parser.add_argument("--output_path", type=str, default="./result/combined/images/test/", required=False, help="Path to image")
 parser.add_argument("--focus_checkpoint_model", type=str, default="./result/esrgan/saved_model/"+FOCUS_MODEL_NAME+"/"+focus_checkpoint+".pth", required=False, help="Path to checkpoint model")
 parser.add_argument("--shaken_checkpoint_model", type=str, default="./result/esrgan/saved_model/"+SHAKEN_MODEL_NAME+"/"+shaken_checkpoint+".pth", required=False, help="Path to checkpoint model")
@@ -89,7 +89,6 @@ correct = 0
 total = 0
 psnr_val = []
 ssim_val = []
-
 # Upsample image
 with torch.no_grad():
     for i, imgs in enumerate(dataloader):
@@ -151,7 +150,7 @@ with torch.no_grad():
             )
         )
         # Save image
-        save_image(denormalize(gen_hr).cpu(), opt.output_path+f"/sr-"+filename)
+        save_image((gen_hr).cpu(), opt.output_path+f"/sr-"+filename)
 
 
 test_accuracy = (correct / total) * 100
