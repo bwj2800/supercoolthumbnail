@@ -13,14 +13,27 @@ import torchvision.transforms as transforms
 mean = np.array([0.485, 0.456, 0.406])
 std = np.array([0.229, 0.224, 0.225])
 
-
 class ImageDataset(Dataset):
     def __init__(self, root, text_file_path, shape):
         height, width = shape
         # Transforms for low resolution images and high resolution images
         self.transform = transforms.Compose(
             [
-                transforms.Resize((height, height), Image.BICUBIC),
+                transforms.Resize((height, width), Image.BICUBIC),
+                # transforms.Resize((height*2, width*2), Image.BICUBIC),
+                # transforms.CenterCrop((height, width)),
+
+                transforms.ToTensor(),
+                transforms.Normalize(mean, std),
+            ]
+        )
+        self.transform_lr = transforms.Compose(
+            [
+                transforms.Resize((height//4, width//4), Image.BICUBIC),
+                # transforms.Resize((height*2, width*2), Image.BICUBIC),
+                # transforms.CenterCrop((height, width)),
+                # transforms.Resize((height//4, width//4), Image.BICUBIC),
+
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
             ]
@@ -44,9 +57,10 @@ class ImageDataset(Dataset):
         path+=file_name[-2]+'/'
         
         clean_img = Image.open(gt_path+self.files[index % len(self.files)][:-6]+'GT.jpg')
+        # img = Image.open(gt_path+self.files[index % len(self.files)][:-6]+'GT.jpg')
         img = Image.open(path+self.files[index % len(self.files)])
         img_gt = self.transform(clean_img)
-        img_lr = self.transform(img)
+        img_lr = self.transform_lr(img)
 
         return {"lr": img_lr, "gt": img_gt}
 
