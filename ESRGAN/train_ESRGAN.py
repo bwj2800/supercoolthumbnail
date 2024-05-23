@@ -14,6 +14,7 @@ import numpy as np
 
 from torchvision.utils import save_image, make_grid
 
+
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
@@ -25,6 +26,8 @@ import torch.nn.functional as F
 import torch
 
 from torcheval.metrics.functional import peak_signal_noise_ratio
+from skimage.metrics import structural_similarity as ssim
+import numpy as np
 torch.cuda.empty_cache()
 
 SAVE_IMAGE_DIR="../result/esrgan/images/training/focus_model2"
@@ -38,8 +41,8 @@ parser.add_argument("--warmup_batches", type=int, default=500, help="number of b
 parser.add_argument("--lambda_adv", type=float, default=5e-3, help="adversarial loss weight")
 parser.add_argument("--lambda_pixel", type=float, default=1e-2, help="pixel-wise loss weight")
 
-parser.add_argument("--epoch", type=int, default=0, help="epoch to start training from")
-parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs of training")
+parser.add_argument("--epoch", type=int, default=492, help="epoch to start training from")
+parser.add_argument("--n_epochs", type=int, default=600, help="number of epochs of training")
 parser.add_argument("--dataset_txt_path", type=str, default="../datasets/new_focus.txt", help="path of the txt file of training dataset")
 parser.add_argument("--val_dataset_txt_path", type=str, default="../datasets/new_val_focus.txt", help="path of the txt file of training dataset")
 parser.add_argument("--dataset_root", type=str, default="../datasets/training", help="root path of train dataset")
@@ -58,6 +61,14 @@ parser.add_argument("--sample_interval", type=int, default=200, help="interval b
 parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between model checkpoints")
 opt = parser.parse_args()
 # print(opt)
+
+# Tensor를 Numpy 배열로 변환하는 함수
+def tensor_to_numpy(tensor):
+    # Tensor가 GPU에 있다면 CPU로 이동
+    if tensor.is_cuda:
+        tensor = tensor.cpu()
+    # Tensor에서 Numpy 배열로 변환
+    return tensor.detach().numpy()  # `.detach()`를 추가하여 gradient 정보를 제거
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -78,8 +89,8 @@ criterion_pixel = torch.nn.L1Loss().to(device)
 
 if opt.epoch != 0:
     # Load pretrained models
-    generator.load_state_dict(torch.load("../result/esrgan/saved_model/all_model/generator_%d.pth" % opt.epoch))
-    discriminator.load_state_dict(torch.load("../result/esrgan/saved_model/all_model/discriminator_%d.pth" % opt.epoch))
+    generator.load_state_dict(torch.load("../result/esrgan/saved_model/focus_model2/generator_%d.pth" % opt.epoch))
+    discriminator.load_state_dict(torch.load("../result/esrgan/saved_model/focus_model2/discriminator_%d.pth" % opt.epoch))
 
 # Optimizers
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.g_lr, betas=(opt.b1, opt.b2))
@@ -157,8 +168,6 @@ for epoch in range(opt.epoch, opt.n_epochs):
         # Total generator loss
         loss_G = loss_content + opt.lambda_adv * loss_GAN + opt.lambda_pixel * loss_pixel
 
-        psnr=peak_signal_noise_ratio(imgs_hr, gen_hr)
-
         loss_G.backward()
         optimizer_G.step()
 
@@ -215,6 +224,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
     #### Evaluation ####
     psnr_val = []
+    ssim_val = []
 
     with torch.no_grad():
         for i, imgs in enumerate(val_dataloader):
@@ -225,13 +235,30 @@ for epoch in range(opt.epoch, opt.n_epochs):
             # Generate a high resolution image from low resolution input
             gen_hr = generator(imgs_lr)
 
-            psnr=peak_signal_noise_ratio(imgs_hr, gen_hr)
+            # calculate PSNR
+            psnr=peak_signal_noise_ratio(denormalize(imgs_hr), denormalize(gen_hr))
             psnr_val.append(psnr)
 
+            # calculate SSIM
+            np_imgs_hr = tensor_to_numpy(imgs_hr)
+            np_gen_hr = tensor_to_numpy(gen_hr)
+            
+            np_imgs_hr = np.squeeze(np_imgs_hr, axis=0)
+            np_gen_hr = np.squeeze(np_gen_hr, axis=0)
+
+            np_imgs_hr = np.transpose(np_imgs_hr, (1, 2, 0))
+            np_gen_hr = np.transpose(np_gen_hr, (1, 2, 0))
+
+            ssim_value = ssim(np_imgs_hr, np_gen_hr, channel_axis=2, data_range=1.0)
+
+            ssim_val.append(ssim_value)
+
+
         avg_psnr=sum(psnr_val) / len(psnr_val)
+        avg_ssim=sum(ssim_val) / len(ssim_val)
         if avg_psnr > best_psnr:
             best_psnr = avg_psnr
             torch.save(generator.state_dict(), SAVE_MODEL_DIR+"/best_generator_%d.pth" % epoch)
             torch.save(discriminator.state_dict(), SAVE_MODEL_DIR+"/best_discriminator_%d.pth" %epoch)
 
-            print("saved best model at [epoch %d PSNR: %.4f]" % (epoch, avg_psnr))
+            print("saved best model at [epoch %d PSNR: %.4f SSIM: %.4f]" % (epoch, avg_psnr, avg_ssim))
