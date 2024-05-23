@@ -37,7 +37,8 @@ parser.add_argument("--n_epochs", type=int, default=200, help="number of epochs 
 parser.add_argument("--dataset_txt_path", type=str, default="../datasets/shaken.txt", help="path of the txt file of training dataset")
 parser.add_argument("--dataset_root", type=str, default="../datasets/training", help="root path of train dataset")
 parser.add_argument("--batch_size", type=int, default=4, help="size of the batches")
-parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
+parser.add_argument("--g_lr", type=float, default=0.0002, help="adam: learning rate of generator")
+parser.add_argument("--d_lr", type=float, default=0.0002, help="adam: learning rate of discriminator")
 parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 parser.add_argument("--decay_epoch", type=int, default=100, help="epoch from which to start lr decay")
@@ -79,8 +80,8 @@ if opt.epoch != 0:
     discriminator.load_state_dict(torch.load("saved_models/discriminator_%d.pth"))
 
 # Optimizers
-optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
-optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
+optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.g_lr, betas=(opt.b1, opt.b2))
+optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=opt.d_lr, betas=(opt.b1, opt.b2))
 
 Tensor = torch.cuda.FloatTensor if cuda else torch.Tensor
 
@@ -101,11 +102,14 @@ for epoch in range(opt.epoch, opt.n_epochs):
         # Configure model input
         imgs_lr = Variable(imgs["lr"].type(Tensor))
         imgs_hr = Variable(imgs["gt"].type(Tensor))
+        # print("----imgs_lr.shape: ",imgs_lr.shape)
+        # print("----imgs_hr.shape: ",imgs_hr.shape)
 
         # Adversarial ground truths
         valid = Variable(Tensor(np.ones((imgs_lr.size(0), *discriminator.output_shape))), requires_grad=False)
         fake = Variable(Tensor(np.zeros((imgs_lr.size(0), *discriminator.output_shape))), requires_grad=False)
-
+        # print("----valid.shape: ",valid.shape)
+        
         # ------------------
         #  Train Generators
         # ------------------
@@ -114,6 +118,7 @@ for epoch in range(opt.epoch, opt.n_epochs):
 
         # Generate a high resolution image from low resolution input
         gen_hr = generator(imgs_lr)
+        # print("----gen_hr.shape: ", gen_hr.shape)
 
         # Adversarial loss
         loss_GAN = criterion_GAN(discriminator(gen_hr), valid)
@@ -121,10 +126,12 @@ for epoch in range(opt.epoch, opt.n_epochs):
         # Content loss
         gen_features = feature_extractor(gen_hr)
         real_features = feature_extractor(imgs_hr)
+        # print("----gen_features.shape:",gen_features.shape)
+
         loss_content = criterion_content(gen_features, real_features.detach())
 
         # Total loss
-        loss_G = loss_content + 1e-3 * loss_GAN
+        loss_G = loss_content + 0.001 * loss_GAN
 
         loss_G.backward()
         optimizer_G.step()
@@ -150,18 +157,21 @@ for epoch in range(opt.epoch, opt.n_epochs):
         # --------------
 
         sys.stdout.write(
-            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f]"
-            % (epoch, opt.n_epochs, i, len(dataloader), loss_D.item(), loss_G.item())
+            "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [G loss_content: %f] [G loss_GAN: %f]\n"
+            % (epoch, opt.n_epochs, i, len(dataloader), loss_D.item(), loss_G.item(), loss_content.item(), loss_GAN.item())
         )
 
         batches_done = epoch * len(dataloader) + i
-        if batches_done % opt.sample_interval == 0:
+        if batches_done % opt.sample_interval == 0 and epoch%1==0:
             # Save image grid with upsampled inputs and SRGAN outputs
             imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=4)
             gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
             imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
             img_grid = torch.cat((imgs_lr, gen_hr), -1)
-            save_image(img_grid, "images/%d.png" % batches_done, normalize=False)
+            save_image(img_grid, "../result/shaken_crop/epoch%d_%d.png" % (epoch, batches_done), normalize=False)
+    #     break
+    # break
+
 
     if opt.checkpoint_interval != -1 and epoch % opt.checkpoint_interval == 0:
         # Save model checkpoints
